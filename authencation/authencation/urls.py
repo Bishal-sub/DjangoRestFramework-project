@@ -22,4 +22,5 @@ urlpatterns = [
     
     path('api/',include('basic_auth.urls')),
     path('api/',include('session_auth.urls')),
+    path('api/',include('token_auth.urls')),
 ]
