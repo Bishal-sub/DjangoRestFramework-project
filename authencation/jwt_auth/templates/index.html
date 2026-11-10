@@ -1,0 +1,172 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JWT Authentication</title>
+</head>
+<body>
+
+    <div id="loginPage">
+        <h2>JWT Login</h2>
+        <form id="loginForm">
+            <label>Username:</label>
+            <input type="text" id="username" placeholder="Enter username" required>
+            <br><br>
+            <label>Password:</label>
+            <input type="password" id="password" placeholder="Enter password" required>
+            <br><br>
+            <button type="submit">Login</button>
+        </form>
+        <p id="message"></p>
+    </div>
+
+    <div id="loadingPage" hidden>
+        <h2>Please wait...</h2>
+        <p>Authenticating your account...</p>
+    </div>
+
+    <div id="homePage" hidden>
+        <h2>Welcome!</h2>
+        <p id="welcomeMessage"></p>
+        <p>JWT Login Successful.</p>
+        <h3>Access Token Information</h3>
+        <p>Expiration Date: <span id="expiryDate"></span></p>
+        <p>Time Remaining: <span id="timeRemaining"></span></p>
+        <button id="logoutButton">Logout</button>
+    </div>
+
+    <script>
+        const loginPage = document.getElementById("loginPage");
+        const loadingPage = document.getElementById("loadingPage");
+        const homePage = document.getElementById("homePage");
+        const loginForm = document.getElementById("loginForm");
+        const message = document.getElementById("message");
+        let expiryTimer = null;
+
+        function showLogin() {
+            clearInterval(expiryTimer);
+            loginPage.hidden = false;
+            loadingPage.hidden = true;
+            homePage.hidden = true;
+        }
+
+        function showLoading() {
+            loginPage.hidden = true;
+            loadingPage.hidden = false;
+            homePage.hidden = true;
+        }
+
+        function showHome(username) {
+            loginPage.hidden = true;
+            loadingPage.hidden = true;
+            homePage.hidden = false;
+            document.getElementById("welcomeMessage").textContent = "Hello, " + username;
+        }
+
+        function decodeToken(token) {
+            const payload = token.split(".")[1];
+            if (!payload) throw new Error("Invalid JWT token.");
+            const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+            const decoded = atob(base64 + "=".repeat((4 - base64.length % 4) % 4));
+            const bytes = Uint8Array.from(decoded, char => char.charCodeAt(0));
+            return JSON.parse(new TextDecoder().decode(bytes));
+        }
+
+        function showTokenExpiry(token) {
+            clearInterval(expiryTimer);
+            try {
+                const decoded = decodeToken(token);
+                if (!decoded.exp) {
+                    document.getElementById("expiryDate").textContent = "Not available";
+                    document.getElementById("timeRemaining").textContent = "Unknown";
+                    return;
+                }
+
+                const expiry = decoded.exp * 1000;
+                document.getElementById("expiryDate").textContent = new Date(expiry).toLocaleString();
+
+                function updateRemainingTime() {
+                    const remaining = expiry - Date.now();
+                    if (remaining <= 0) {
+                        document.getElementById("timeRemaining").textContent = "Token Expired";
+                        clearInterval(expiryTimer);
+                        return;
+                    }
+
+                    const hours = Math.floor(remaining / 3600000);
+                    const minutes = Math.floor((remaining % 3600000) / 60000);
+                    const seconds = Math.floor((remaining % 60000) / 1000);
+                    document.getElementById("timeRemaining").textContent = `${hours}h ${minutes}m ${seconds}s`;
+                }
+
+                updateRemainingTime();
+                expiryTimer = setInterval(updateRemainingTime, 1000);
+            } catch (error) {
+                document.getElementById("expiryDate").textContent = "Invalid token";
+                document.getElementById("timeRemaining").textContent = "Unknown";
+                console.error(error);
+            }
+        }
+
+        loginForm.addEventListener("submit", async function(event) {
+            event.preventDefault();
+            const username = document.getElementById("username").value.trim();
+            const password = document.getElementById("password").value;
+            message.textContent = "";
+            showLoading();
+
+            try {
+                const response = await fetch("/api/token_obtain", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail || "Invalid username or password.");
+                if (!data.access) throw new Error("Access token not received.");
+
+                localStorage.setItem("access_token", data.access);
+                if (data.refresh) localStorage.setItem("refresh_token", data.refresh);
+
+                showHome(username);
+                showTokenExpiry(data.access);
+            } catch (error) {
+                showLogin();
+                message.textContent = error.message;
+            }
+        });
+
+        document.getElementById("logoutButton").addEventListener("click", function() {
+            localStorage.removeItem("access_token");
+            localStorage.removeItem("refresh_token");
+            loginForm.reset();
+            message.textContent = "";
+            showLogin();
+        });
+
+        window.addEventListener("DOMContentLoaded", function() {
+            const token = localStorage.getItem("access_token");
+            if (token) {
+                try {
+                    const decoded = decodeToken(token);
+                    if (!decoded.exp || decoded.exp * 1000 <= Date.now()) {
+                        localStorage.removeItem("access_token");
+                        showLogin();
+                        return;
+                    }
+                    showHome(decoded.username || "User");
+                    showTokenExpiry(token);
+                } catch (error) {
+                    localStorage.removeItem("access_token");
+                    showLogin();
+                }
+            } else {
+                showLogin();
+            }
+        });
+    </script>
+</body>
+</html>
