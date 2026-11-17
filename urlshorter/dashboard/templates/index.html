@@ -1,0 +1,155 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URL Shortener</title>
+
+ 
+</head>
+
+<body>
+
+    <div class="container">
+
+        <h1>URL Shortener</h1>
+
+        <p class="subtitle">
+            Shorten your long URLs and share them easily.
+        </p>
+
+        <form id="urlForm">
+
+            <label for="original_url">Enter your original URL</label>
+
+            <input
+                type="url"
+                id="original_url"
+                placeholder="https://www.example.com"
+                required
+            >
+
+            <button type="submit" id="submitBtn">
+                Shorten URL
+            </button>
+
+        </form>
+
+        <div class="result" id="result">
+
+            <h3>Your shortened URL is ready!</h3>
+
+            <p class="original" id="originalDisplay"></p>
+
+            <p class="short-link" id="shortUrl"></p>
+
+            <button type="button" class="copy-btn" id="copyBtn">
+                Copy Short URL
+            </button>
+
+            <a href="#" target="_blank" class="open-btn" id="openBtn">
+                Open Short URL
+            </a>
+
+        </div>
+
+        <p class="message" id="message"></p>
+
+    </div>
+
+    <script>
+
+        const form = document.getElementById("urlForm");
+
+        form.addEventListener("submit", async function(event) {
+
+            event.preventDefault();
+
+            const originalUrl =
+                document.getElementById("original_url").value.trim();
+
+            const submitBtn =
+                document.getElementById("submitBtn");
+
+            const result =
+                document.getElementById("result");
+
+            const message =
+                document.getElementById("message");
+
+            submitBtn.disabled = true;
+            submitBtn.innerText = "Shortening...";
+            message.innerText = "";
+            result.style.display = "none";
+
+            try {
+
+                const response = await fetch("/api/post/", {
+
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+
+                    body: JSON.stringify({
+                        original_url: originalUrl
+                    })
+
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+
+                    message.innerText =
+                        JSON.stringify(data);
+
+                    return;
+                }
+
+                document.getElementById("originalDisplay").innerText =
+                    "Original URL: " + data.original_url;
+
+                document.getElementById("shortUrl").innerText =
+                    data.short_url;
+
+                document.getElementById("openBtn").href =
+                    data.short_url;
+
+                result.style.display = "block";
+
+            } catch (error) {
+
+                message.innerText =
+                    "Unable to connect to Django server.";
+
+            } finally {
+
+                submitBtn.disabled = false;
+                submitBtn.innerText = "Shorten URL";
+
+            }
+
+        });
+
+
+        document.getElementById("copyBtn").addEventListener("click", async function() {
+
+            const shortUrl =
+                document.getElementById("shortUrl").innerText;
+
+            try {
+                await navigator.clipboard.writeText(shortUrl);
+                this.innerText = "Copied!";
+            } catch (error) {
+                alert("Unable to copy. Please copy the URL manually.");
+            }
+
+        });
+
+    </script>
+
+</body>
+</html>
